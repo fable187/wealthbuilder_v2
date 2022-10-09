@@ -51,7 +51,7 @@ class plaid_interface():
         return {'error': {'status_code': e.status, 'display_message':
             response['error_message'], 'error_code': response['error_code'], 'error_type': response['error_type']}}
 
-    def get_accounts(self):
+    def get_account_details(self):
         try:
             request = AccountsGetRequest(
                 access_token=self.ACCESS_TOKEN
@@ -63,7 +63,7 @@ class plaid_interface():
             error_response = self.format_error(e)
             return error_response
 
-    def get_balance(self):
+    def get_account_balances(self):
         try:
             request = AccountsBalanceGetRequest(
                 access_token=self.ACCESS_TOKEN
@@ -80,7 +80,7 @@ class plaid_interface():
         """
         retrieves all plaid connected accounts
         """
-        account_list = self.get_accounts(self.token)
+        account_list = self.get_account_details()
         acct_names = []
         acct_balances = []
         acct_ids = []
@@ -151,4 +151,5 @@ class plaid_interface():
 
 if __name__ == "__main__":
     plaid_tool = plaid_interface()
+    all_accounts = plaid_tool.get_plaid_accounts()
     transaction_history = plaid_tool.get_account_history(option='m', periods=1)
