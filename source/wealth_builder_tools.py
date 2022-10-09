@@ -5,14 +5,14 @@ from plaid.model.products import Products
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from plaid.model.accounts_get_request import AccountsGetRequest
-from plaid.model.accounts_balance_get_request import AccountsBalanceGetRequest
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import json
+from dataclasses import dataclass
 
 
-class plaid_interface():
+class Plaid_Interface():
 
     def __init__(self):
         config_environment = {
@@ -63,22 +63,10 @@ class plaid_interface():
             error_response = self.format_error(e)
             return error_response
 
-    def get_account_balances(self):
-        try:
-            request = AccountsBalanceGetRequest(
-                access_token=self.ACCESS_TOKEN
-            )
-            response = self.client.accounts_balance_get(request)
-
-            return response
-        except plaid.ApiException as e:
-            error_response = self.format_error(e)
-            return error_response
-
-
     def get_plaid_accounts(self):
         """
-        retrieves all plaid connected accounts
+        retrieves all plaid connected accounts and returns
+        them in a dataframe
         """
         account_list = self.get_account_details()
         acct_names = []
@@ -147,9 +135,47 @@ class plaid_interface():
             return response_dict
 
 
+@dataclass
+class Bill:
+    name: str
+    due_date = int # verify this field is appearing.. was having issues..
+    frequency: int = 1
+    period: str = 'monthly'
+    amount: float = 0
+
+
+    def to_dict(self):
+        return {'NAME': self.name,
+                'FREQUENCY': self.frequency,
+                'PERIOD': self.period,
+                'AMOUNT': self.amount,
+                'DUE_DATE': self.due_date}
+
+class Account_Analyzer():
+
+    def __init__(self):
+        self.bill_list = []
+
+    def add_recurring_bill(self, bill: Bill):
+        """
+        add a bill name to track.  This will update bill_names_list
+        """
+        self.bill_list.append(bill)
+
+    def report_bills(self) -> dict:
+        """
+        :return: bill_list: list
+        """
+        return [bill.to_dict() for bill in self.bill_list]
+
+    def find_bills_in_period(self, bills_to_check: list):
+        """
+        :param bills_to_check: list of Bills
+        :return: all occurrences of the bills in the given periods
+        """
 
 
 if __name__ == "__main__":
-    plaid_tool = plaid_interface()
+    plaid_tool = Plaid_Interface()
     all_accounts = plaid_tool.get_plaid_accounts()
     transaction_history = plaid_tool.get_account_history(option='m', periods=1)
