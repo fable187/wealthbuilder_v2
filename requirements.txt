@@ -1,0 +1,10 @@
+Flask
+plaid_python
+python-dotenv
+plaid-python
+pandas
+plotly
+matplotlib
+numpy
+dash
+python-dateutil
