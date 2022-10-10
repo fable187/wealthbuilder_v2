@@ -15,6 +15,9 @@ from dataclasses import dataclass
 class Plaid_Interface():
 
     def __init__(self):
+        """
+        initiates the plaid credentials and creates an api connection to the Plaid API
+        """
         config_environment = {
             'sandbox': plaid.Environment.Sandbox,
             'development': plaid.Environment.Development,
@@ -47,11 +50,18 @@ class Plaid_Interface():
             self.products.append(Products(product))
 
     def format_error(self, e):
+        """
+        Formats the errors provided from Plaid Exceptions
+        """
         response = json.loads(e.body)
         return {'error': {'status_code': e.status, 'display_message':
             response['error_message'], 'error_code': response['error_code'], 'error_type': response['error_type']}}
 
     def get_account_details(self):
+        """
+        Calls accounts_get() to retrieve all accounts and their current balances
+        :return: Plaid Response
+        """
         try:
             request = AccountsGetRequest(
                 access_token=self.ACCESS_TOKEN
@@ -63,7 +73,7 @@ class Plaid_Interface():
             error_response = self.format_error(e)
             return error_response
 
-    def get_plaid_accounts(self):
+    def get_plaid_accounts(self) -> pd.DataFrame:
         """
         retrieves all plaid connected accounts and returns
         them in a dataframe
@@ -81,7 +91,7 @@ class Plaid_Interface():
                             columns=['Account_ID', 'Account_Name', 'Balance'])
 
     @staticmethod
-    def get_date_range(option="m", periods=1):
+    def get_date_range(option="m", periods=1) -> list:
         """
         reads in number of periods and type of unit:
         m - month
@@ -105,7 +115,15 @@ class Plaid_Interface():
             date_list.append(date.date())
         return date_list
 
-    def get_account_history(self, option='m', periods=1):
+    def get_account_history(self, option='m', periods=1) -> pd.DataFrame:
+        """
+        :param option: str
+        :param periods: int
+        :description: takes months, weeks, or days as intergers and
+        queries plaid api for all activity in those periods
+        Example:  option = m, periods = 1 means look 1 month back
+        :return: dataframe
+        """
 
         date_range = self.get_date_range(periods=periods, option=option)
         date_query_list = []
@@ -122,6 +140,11 @@ class Plaid_Interface():
         return pd.json_normalize(history_concat_list, record_path=['transactions'])
 
     def get_transactions_from_plaid(self, start=None, end=None):
+        """
+        :param start: datetime
+        :param end: datetime
+        :return: dictionary
+        """
         if start is not None:
             options = TransactionsGetRequestOptions(count=500)
             request = TransactionsGetRequest(
@@ -138,23 +161,28 @@ class Plaid_Interface():
 @dataclass
 class Bill:
     name: str
-    due_date = int # verify this field is appearing.. was having issues..
+    regex: str
+    due_date: str
+    merchant_name: str
     frequency: int = 1
     period: str = 'monthly'
     amount: float = 0
 
-
     def to_dict(self):
         return {'NAME': self.name,
+                'REGEX': self.regex,
                 'FREQUENCY': self.frequency,
+                'MERCHANT_NAME': self.merchant_name,
                 'PERIOD': self.period,
                 'AMOUNT': self.amount,
                 'DUE_DATE': self.due_date}
 
+
 class Account_Analyzer():
 
-    def __init__(self):
+    def __init__(self, account_history):
         self.bill_list = []
+        self.account_history = account_history
 
     def add_recurring_bill(self, bill: Bill):
         """
@@ -168,11 +196,30 @@ class Account_Analyzer():
         """
         return [bill.to_dict() for bill in self.bill_list]
 
-    def find_bills_in_period(self, bills_to_check: list):
+    def analyze_bill_activity(self, bill: Bill):
+        """
+        :param bill: Bill
+        :param checking_df: DataFrame
+        :return: Dict - showing number of occurrences of bill across all billing periods
+        """
+        bill_filter_condition = self.account_history['merchant_name'].apply(lambda mn: str(mn).strip().lower()) == bill.merchant_name.strip().lower()
+        bill_activity = self.account_history[bill_filter_condition].copy()
+        bill_activity['date'] = pd.to_datetime(bill_activity['date'])
+        bill_occurences = bill_activity.groupby(['date', 'name', 'amount'])['category_id'].count()
+        bill_occurences_to_df = pd.DataFrame(bill_occurences).reset_index()
+        bill_occurences_to_df.rename({'count': 'category_id'}, inplace=True)
+
+        return bill_occurences_to_df
+
+    def find_bills_in_period(self):
         """
         :param bills_to_check: list of Bills
         :return: all occurrences of the bills in the given periods
         """
+        billing_acivity_list = []
+        for bill in self.bill_list:
+            billing_acivity_list.append(self.analyze_bill_activity(bill))
+        return billing_acivity_list
 
 
 if __name__ == "__main__":
